@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EQ Tagging — Pilot (3 versions)</title>
+  <script src="lib/jspsych.js"></script>
+  <script src="lib/plugin-preload.js"></script>
+  <script src="lib/plugin-html-button-response.js"></script>
+  <script src="lib/plugin-html-keyboard-response.js"></script>
+  <script src="lib/plugin-instructions.js"></script>
+  <script src="lib/plugin-survey-likert.js"></script>
+  <script src="lib/plugin-survey-multi-choice.js"></script>
+  <script src="lib/plugin-survey-html-form.js"></script>
+  <script src="lib/plugin-call-function.js"></script>
+  <script src="lib/sortable.js"></script>
+  <link  href="lib/jspsych.css" rel="stylesheet">
+  <script src="experiment_trials.js"></script>
+  <style>
+    .seg{margin:10px 0}
+    .seglabel{margin-bottom:4px}
+    .seglabel.ref{font-weight:bold}
+    audio{width:320px;max-width:90vw}
+    #listen-hint{color:#c62828;margin:12px 0;font-weight:bold}
+    .jspsych-content{max-width:760px}
+    table.assign td{padding:6px 10px;text-align:left;vertical-align:middle}
+    .ratehdr{text-align:center;font-size:12px;color:#555;line-height:1.2}
+    select{font-size:15px;padding:3px}
+    .forced-wrap{margin:22px auto 0;padding-top:14px;border-top:1px solid #ddd;max-width:380px}
+    .forced-slider{width:100%;display:block;margin:0;-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;background:#1565c0;outline:none}
+    .forced-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:#0d47a1;cursor:pointer;border:2px solid #fff;box-shadow:0 0 2px rgba(0,0,0,.4)}
+    .forced-slider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#0d47a1;cursor:pointer;border:2px solid #fff}
+    .forced-slider::-moz-range-track{height:6px;border-radius:3px;background:#1565c0}
+    .forced-slider::-moz-range-progress{height:6px;border-radius:3px;background:#1565c0}
+    .forced-poles{display:flex;justify-content:space-between;font-size:13px;color:#555;margin-top:4px}
+    .forced-poles span:last-child{text-align:right}
+    #players .dz-row{display:grid;grid-template-columns:64px 320px 176px;align-items:center;column-gap:16px;margin:8px 0;justify-content:center}
+    .dz-label{font-weight:bold;text-align:right;white-space:nowrap}
+    .dz-audio{width:320px}
+    .slot{width:170px;min-height:42px;border:2px dashed #bbb;border-radius:22px;display:flex;align-items:center;justify-content:center;padding:3px;box-sizing:border-box}
+    .slot.filled{border-style:solid;border-color:#333}
+    .slot .chip{border:none;background:transparent;padding:6px 10px}
+    .bank{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:8px;min-height:46px;padding:10px}
+    .chip{background:#fff;border:2px solid #333;border-radius:22px;padding:8px 16px;cursor:grab;user-select:none;font-size:15px;white-space:nowrap}
+    .chip:active{cursor:grabbing}
+    .sortable-ghost{opacity:.4}
+  </style>
+</head>
+<body></body>
+<script>
+/* ===== CONFIG: set DATAPIPE_ID after creating a free experiment at
+   https://pipe.jatos.org . Leave as placeholder to test locally
+   (data downloads to your computer at the end). ===== */
+const DATAPIPE_ID = "Pqtt6yAMupO8";
+
+window.addEventListener('error', function(e){
+  document.body.innerHTML = '<div style="max-width:700px;margin:40px auto;font-family:system-ui;color:#c62828">'
+    +'<h3>Something failed to load</h3><p>'+(e.message||e)+'</p>'
+    +'<p>Check that the <code>lib</code> folder and <code>experiment_trials.js</code> are next to <code>index.html</code>.</p></div>';
+});
+(function(){
+  const names=['initJsPsych','jsPsychPreload','jsPsychHtmlButtonResponse','jsPsychHtmlKeyboardResponse',
+    'jsPsychInstructions','jsPsychSurveyLikert','jsPsychSurveyMultiChoice','jsPsychSurveyHtmlForm','jsPsychCallFunction','Sortable'];
+  const missing=names.filter(n=>typeof window[n]==='undefined');
+  if(typeof TRIALS==='undefined') missing.push('TRIALS (experiment_trials.js)');
+  if(missing.length) throw new Error('Not loaded: '+missing.join(', '));
+})();
+
+const jsPsych = initJsPsych({ show_progress_bar:true, message_progress_bar:'Progress', auto_update_progress_bar:true });
+
+const urlp = new URLSearchParams(window.location.search);
+const PID = urlp.get('id') || urlp.get('PROLIFIC_PID') || jsPsych.randomization.randomID(8);
+const VERSION_ORDER = jsPsych.randomization.shuffle(['v1','v2','v3']);
+jsPsych.data.addProperties({ participant_id:PID, version_order:VERSION_ORDER.join('>') });
+
+/* navigation + answer persistence (for Back within a section) */
+const STORE = {};   // trial_id -> saved answer state (restored when a trial is revisited)
+const BUILT = {};   // trial_id -> built trial pieces (stable shuffles across revisits)
+let NAV = 0;        // increments each render; used to keep only the final answer per trial at save
+let GOING_BACK = false;
+
+/* ---------- helpers ---------- */
+const sh = a => jsPsych.randomization.shuffle(a);
+function playersHTML(segments){
+  let h='<div id="players">';
+  segments.forEach((s,i)=>{ h+='<div class="seg"><div class="seglabel'+(s.isRef?' ref':'')+'">'
+    +s.label+(s.isRef?'  (compare the others to this)':'')+'</div>'
+    +'<audio id="aud'+i+'" src="'+s.url+'" controls preload="auto"></audio></div>'; });
+  h+='</div><div id="listen-hint">Listen fully to all '+segments.length+' segments to continue.</div>';
+  return h;
+}
+// the forcedness slider markup, placed at the bottom of every trial's form
+function sliderHTML(){
+  return '<div class="forced-wrap"><p style="margin-bottom:6px"><strong>Are you happy with your choice?</strong></p>'
+    +'<input type="range" min="0" max="100" value="50" name="forcedness" class="forced-slider">'
+    +'<div class="forced-poles"><span>choice felt forced</span>'
+    +'<span>choice felt truthful</span></div></div>';
+}
+function controlsIn(root){ return Array.from(root.querySelectorAll('input[type=submit], button[type=submit], .jspsych-btn')); }
+function wireGating(root, controls, trialId, startUnlocked){
+  const audios=Array.from(root.querySelectorAll('#players audio'));
+  const played=audios.map(()=>false), lastT=audios.map(()=>0);
+  const setD=v=>controls.forEach(c=>{ c.disabled=v; c.style.opacity=v?0.4:1; c.style.pointerEvents=v?'none':'auto'; });
+  audios.forEach(a=>a.addEventListener('play',()=>audios.forEach(o=>{ if(o!==a) o.pause(); }))); // one at a time
+  if(startUnlocked){ setD(false); const h=root.querySelector('#listen-hint'); if(h) h.style.display='none'; return; } // already heard on an earlier visit
+  setD(true);
+  audios.forEach((a,idx)=>{
+    a.addEventListener('timeupdate',()=>{ if(!a.seeking && a.currentTime>lastT[idx]+1.0 && !played[idx]) a.currentTime=lastT[idx]; else lastT[idx]=a.currentTime; });
+    a.addEventListener('seeking',()=>{ if(a.currentTime>lastT[idx]+1.0 && !played[idx]) a.currentTime=lastT[idx]; });
+    a.addEventListener('ended',()=>{ played[idx]=true; lastT[idx]=0;
+      if(played.every(Boolean)){ setD(false); const h=root.querySelector('#listen-hint'); if(h) h.style.display='none';
+        if(trialId){ STORE[trialId]=STORE[trialId]||{}; STORE[trialId].unlocked=true; } } });
+  });
+}
+// require the slider to be moved before the form submits; also run a caller validator
+function wireForm(root, extraValidate){
+  const form=root.querySelector('form');
+  const s=root.querySelector('.forced-slider');
+  if(s) s.addEventListener('input',()=>{ s.dataset.moved='1'; });
+  form.addEventListener('submit',function(e){
+    if(GOING_BACK) return; // going back: don't validate, just leave this trial
+    if(extraValidate && !extraValidate(form)){ e.preventDefault(); e.stopPropagation(); return; }
+    if(s && !s.dataset.moved){ e.preventDefault(); e.stopPropagation(); alert('Please move the slider to show how the answer felt.'); }
+  }, true);
+}
+// a Back button that leaves the current trial without validation (answers are saved on_finish)
+function addBackButton(root){
+  const submitBtn=controlsIn(root)[0]; if(!submitBtn) return;
+  const form=root.querySelector('form');
+  const back=document.createElement('button');
+  back.type='button'; back.textContent='◀ Back'; back.className='jspsych-btn'; back.style.marginRight='10px';
+  back.addEventListener('click',function(){
+    GOING_BACK=true;
+    form.querySelectorAll('[required]').forEach(el=>el.removeAttribute('required'));
+    if(form.requestSubmit) form.requestSubmit(); else { submitBtn.disabled=false; submitBtn.click(); }
+  });
+  submitBtn.parentNode.insertBefore(back, submitBtn);
+}
+function refSegments(t){ const ctx=sh(t.ctx_urls.slice());
+  const segs=ctx.map((u,i)=>({label:'Segment '+(i+1),url:u,isRef:false}));
+  segs.push({label:'Reference',url:t.ref_url,isRef:true});
+  return { segs, presented_order:ctx.join(' | ') };
+}
+const forced = respVal => (100 - (+respVal))/100; // left=forced(1) .. right=truthful(0)
+
+/* Each builder returns {preamble, html, data, onLoad(root,opts), onFinish(d)}.
+   Built once per trial_id (stable shuffles) so answers restore correctly on Back. */
+
+/* ---------- v1: choose one (radios + slider) ---------- */
+function buildChoose(t){
+  const {segs,presented_order}=refSegments(t);
+  const choices=sh(t.choices.slice());
+  const radios=choices.map(c=>'<label style="display:block;margin:5px 0"><input type="radio" name="tag" value="'+c.word+'" required> '+c.word+'</label>').join('');
+  return {
+    preamble:'<p><strong>The final segment is the Reference.</strong> Which single word best describes how the Reference sounds compared to the other segments?</p>'+playersHTML(segs),
+    html:'<div style="text-align:left;display:inline-block">'+radios+'</div>'+sliderHTML(),
+    data:{task:'tag', version:(t.version==='practice'?'practice':'v1'), response_format:'choose', practice:(t.version==='practice'),
+          trial_id:t.trial_id, track_id:t.track_id, ref_eq:t.ref_eq, presented_order:presented_order,
+          choice_map:Object.fromEntries(choices.map(c=>[c.word,c.method]))},
+    onLoad:function(root, opts){
+      const st=STORE[t.trial_id];
+      wireGating(root, controlsIn(root), t.trial_id, !!(st&&st.unlocked));
+      if(st){ if(st.tag) root.querySelectorAll('input[name=tag]').forEach(r=>{ if(r.value===st.tag) r.checked=true; });
+        const sl=root.querySelector('.forced-slider'); if(sl&&st.forcedness!=null){ sl.value=st.forcedness; sl.dataset.moved='1'; } }
+      wireForm(root);
+      if(opts&&opts.canBack) addBackButton(root);
+    },
+    onFinish:function(d){ const w=d.response.tag; d.chosen_word=w; d.chosen_method=d.choice_map[w]; d.forcedness=forced(d.response.forcedness);
+      STORE[t.trial_id]=Object.assign(STORE[t.trial_id]||{}, {tag:w, forcedness:d.response.forcedness}); }
+  };
+}
+
+/* ---------- v2: rate each word 1-5 for accuracy to the reference ---------- */
+function buildRate(t){
+  const {segs,presented_order}=refSegments(t);
+  const choices=sh(t.choices.slice());
+  let rows='<table class="assign"><tr><td></td>'
+    +'<td class="ratehdr">1<br>not<br>accurate</td><td class="ratehdr">2</td><td class="ratehdr">3</td><td class="ratehdr">4</td><td class="ratehdr">5<br>very<br>accurate</td></tr>';
+  choices.forEach((c,i)=>{ let cells='';
+    for(let r=1;r<=5;r++) cells+='<td style="text-align:center"><input type="radio" name="rate_'+i+'" value="'+r+'"'+(r===1?' required':'')+'></td>';
+    rows+='<tr><td>'+c.word+'</td>'+cells+'</tr>'; });
+  rows+='</table>';
+  return {
+    preamble:'<p><strong>The final segment is the Reference.</strong> Rate how accurately each word describes how the Reference sounds compared to the other segments.</p>'+playersHTML(segs),
+    html:rows+sliderHTML(),
+    data:{task:'tag', version:'v2', response_format:'rate', trial_id:t.trial_id, track_id:t.track_id, ref_eq:t.ref_eq,
+          presented_order:presented_order, rate_methods:choices.map(c=>c.method), rate_words:choices.map(c=>c.word)},
+    onLoad:function(root, opts){
+      const st=STORE[t.trial_id];
+      wireGating(root, controlsIn(root), t.trial_id, !!(st&&st.unlocked));
+      if(st&&st.rates){ st.rates.forEach((val,i)=>{ if(val!=null) root.querySelectorAll('input[name=rate_'+i+']').forEach(r=>{ if(r.value===String(val)) r.checked=true; }); });
+        const sl=root.querySelector('.forced-slider'); if(sl&&st.forcedness!=null){ sl.value=st.forcedness; sl.dataset.moved='1'; } }
+      wireForm(root);
+      if(opts&&opts.canBack) addBackButton(root);
+    },
+    onFinish:function(d){ const r={}, raw=[]; choices.forEach((c,i)=>{ r[c.method]=d.response['rate_'+i]; raw[i]=d.response['rate_'+i]; }); d.ratings=r; d.forcedness=forced(d.response.forcedness);
+      STORE[t.trial_id]=Object.assign(STORE[t.trial_id]||{}, {rates:raw, forcedness:d.response.forcedness}); }
+  };
+}
+
+/* ---------- v3: drag 5 words onto 5 tracks (drag-and-drop + slider) ---------- */
+function buildMatch(t){
+  const segList=sh(t.segments.map(s=>({...s}))).map(s=>({url:s.url,true_tag:s.true_tag,eq:s.eq}));
+  const pool=sh(t.segments.map(s=>s.true_tag));
+  let grid='<div id="players">';
+  segList.forEach((s,i)=>{ grid+='<div class="dz-row">'
+    +'<div class="dz-label">Track '+(i+1)+'</div>'
+    +'<audio id="aud'+i+'" class="dz-audio" src="'+s.url+'" controls preload="auto"></audio>'
+    +'<div class="slot" id="slot-'+i+'" data-i="'+i+'"></div>'
+    +'<input type="hidden" name="seg_'+i+'" value="">'
+    +'</div>'; });
+  grid+='</div><div id="listen-hint">Listen fully to all 5 tracks to continue.</div>';
+  const bank='<div id="tagbank" class="bank">'+pool.map(w=>'<div class="chip" data-tag="'+w+'">'+w+'</div>').join('')+'</div>';
+  return {
+    preamble:'<p><strong>Drag each word into the slot beside the track you think it best describes.</strong> Every word is used exactly once.</p>',
+    html:grid+'<p style="font-size:13px;color:#555;text-align:center;margin:10px 0 2px">Drag the words below up into the slots</p>'+bank+sliderHTML(),
+    data:{task:'match', version:'v3', trial_id:t.trial_id, track_id:t.track_id, model:t.model,
+          seg_true:segList.map(s=>s.true_tag), seg_eq:segList.map(s=>s.eq), tag_pool:pool},
+    onLoad:function(root, opts){
+      const st=STORE[t.trial_id];
+      wireGating(root, controlsIn(root), t.trial_id, !!(st&&st.unlocked));
+      const slots=Array.from(root.querySelectorAll('.slot'));
+      const setHidden=()=>slots.forEach(sl=>{ const chip=sl.querySelector('.chip'); sl.classList.toggle('filled',!!chip);
+        root.querySelector('input[name=seg_'+sl.dataset.i+']').value = chip?chip.dataset.tag:''; });
+      const grp={name:'tags', pull:true, put:function(to){ return to.el.id==='tagbank' || to.el.children.length===0; }};
+      new Sortable(root.querySelector('#tagbank'),{group:grp,animation:120,onSort:setHidden,onAdd:setHidden,onRemove:setHidden});
+      slots.forEach(sl=> new Sortable(sl,{group:grp,animation:120,onSort:setHidden,onAdd:setHidden,onRemove:setHidden}));
+      if(st&&st.assign){ st.assign.forEach((tag,i)=>{ if(tag){ const chip=Array.from(root.querySelectorAll('#tagbank .chip')).find(c=>c.dataset.tag===tag); const slot=root.querySelector('#slot-'+i); if(chip&&slot) slot.appendChild(chip); } }); }
+      setHidden();
+      if(st){ const sl=root.querySelector('.forced-slider'); if(sl&&st.forcedness!=null){ sl.value=st.forcedness; sl.dataset.moved='1'; } }
+      wireForm(root, function(){ if(slots.some(sl=>!sl.querySelector('.chip'))){ alert('Drag a word into every track\'s slot.'); return false; } return true; });
+      if(opts&&opts.canBack) addBackButton(root);
+    },
+    onFinish:function(d){ const assigned=segList.map((s,i)=>d.response['seg_'+i]);
+      d.assigned=assigned; const corr=segList.map((s,i)=>assigned[i]===s.true_tag);
+      d.n_correct=corr.filter(Boolean).length; d.accuracy=d.n_correct/5; d.exact_match=(d.n_correct===5); d.forcedness=forced(d.response.forcedness);
+      STORE[t.trial_id]=Object.assign(STORE[t.trial_id]||{}, {assign:assigned, forcedness:d.response.forcedness}); }
+  };
+}
+
+const BUILDERS={ v1:buildChoose, v2:buildRate, v3:buildMatch, practice:buildChoose };
+function getBuilt(v,t){ if(!BUILT[t.trial_id]) BUILT[t.trial_id]=BUILDERS[v](t); return BUILT[t.trial_id]; }
+
+/* practice: single standalone trial (no Back) */
+function practiceNode(){
+  const t=TRIALS.practice;
+  return { type: jsPsychSurveyHtmlForm, button_label:'Continue',
+    preamble: function(){ return getBuilt('practice',t).preamble; },
+    html:     function(){ return getBuilt('practice',t).html; },
+    data:     function(){ return Object.assign({}, getBuilt('practice',t).data); },
+    on_load:  function(){ getBuilt('practice',t).onLoad(document.querySelector('.jspsych-content'), {canBack:false}); },
+    on_finish:function(d){ getBuilt('practice',t).onFinish(d); } };
+}
+
+/* ---------- version block: intro, 3 trials with Back/Continue, tired+clear check ---------- */
+const TASK_DESC = { v1:'choose the single best word', v2:'rate how accurately each word describes the Reference', v3:'match each word to a segment' };
+function versionBlock(v){
+  let idx=0; const N=TRIALS[v].length;
+  const intro={ type: jsPsychHtmlButtonResponse,
+    stimulus:'<h3>Next section</h3><p>In this section your task is to <strong>'+TASK_DESC[v]+'</strong> for each trial.</p><p>Listen to every segment fully. Nothing advances on its own — you choose when to continue, and can change your answer before you do. Use <strong>Back</strong> to return to an earlier trial in this section if you want to revise it. At the bottom of each trial, move the slider to show how forced vs honest the answer felt.</p>',
+    choices:['Start'] };
+  const trialNode={ type: jsPsychSurveyHtmlForm, button_label:'Continue',
+    preamble: function(){ return getBuilt(v, TRIALS[v][idx]).preamble; },
+    html:     function(){ return getBuilt(v, TRIALS[v][idx]).html; },
+    data:     function(){ return Object.assign({}, getBuilt(v, TRIALS[v][idx]).data, {nav_seq:++NAV}); },
+    on_load:  function(){ getBuilt(v, TRIALS[v][idx]).onLoad(document.querySelector('.jspsych-content'), {canBack: idx>0}); },
+    on_finish:function(d){ getBuilt(v, TRIALS[v][idx]).onFinish(d);
+      if(GOING_BACK){ GOING_BACK=false; idx=Math.max(0, idx-1); } else { idx++; } } };
+  const loop={ timeline:[trialNode], loop_function:function(){ return idx < N; } };
+  const post={ type: jsPsychSurveyLikert, preamble:'<h4>Quick check</h4>', questions:[
+    {prompt:'How mentally tired do you feel right now?', labels:['1 not at all','2','3','4','5 extremely'], required:true, name:'tired'},
+    {prompt:'How clear was this task?', labels:['1 very unclear','2','3','4','5 very clear'], required:true, name:'clear'}
+  ], data:{task:'post_version', version:v} };
+  return [intro, loop, post];
+}
+
+/* ---------- timeline ---------- */
+const timeline=[];
+const allAudio=[...new Set([].concat(
+  ...[...TRIALS.v1,...TRIALS.v2,TRIALS.practice].map(t=>[t.ref_url,...t.ctx_urls]),
+  ...TRIALS.v3.map(t=>t.segments.map(s=>s.url))
+))];
+timeline.push({ type: jsPsychPreload, audio:allAudio, message:'Loading audio…', show_progress_bar:true, continue_after_error:true });
+
+timeline.push({ type: jsPsychHtmlButtonResponse,
+  stimulus:'<h2>Thank you for taking part</h2><p>You will listen to short audio segments and describe how they sound, in three short sections. It takes about <strong>15–20 minutes</strong> and needs <strong>headphones in a quiet room</strong>. Responses are anonymous and used only for research. You may stop at any time.</p><p>By continuing you agree to take part.</p>',
+  choices:['I agree — continue'] });
+
+timeline.push({ type: jsPsychHtmlButtonResponse,
+  stimulus:'<h3>Headphone check</h3><p>Put on your headphones and set a comfortable volume with the clip below. You should hear it clearly in both ears.</p><audio src="'+TRIALS.practice.ref_url+'" controls preload="auto" style="width:320px"></audio><p style="font-size:13px;color:#555">If you can\'t hear it, raise your volume or check your headphones.</p>',
+  choices:['Quit','I can hear it clearly'], data:{task:'headphone_check'},
+  on_finish:function(d){ if(d.response===0){ jsPsych.abortExperiment('Thanks for your time — you can close this tab.'); } } });
+
+timeline.push({ type: jsPsychInstructions, show_clickable_nav:true, pages:[
+  '<h3>How it works</h3><p>You will do <strong>three short sections</strong>. In each trial you hear several short segments of the same track and describe how they sound using a few words. The task differs slightly between sections — each is explained when it begins.</p>',
+  '<h3>Two rules</h3><p>1. Listen to <strong>every segment fully</strong> — the response unlocks only after all have played, and you cannot skip ahead (you can replay).</p><p>2. At the bottom of every trial, a slider asks how <em>honest vs forced</em> your answer felt. There are no right or wrong answers.</p>',
+  '<h3>Practice</h3><p>First, one practice trial to get the feel. It does not count.</p>'
+]});
+
+timeline.push( practiceNode() );
+timeline.push({ type: jsPsychHtmlButtonResponse, stimulus:'<p>That was practice. The three real sections begin now — thank you!</p>', choices:['Begin'] });
+
+VERSION_ORDER.forEach(v=> versionBlock(v).forEach(x=>timeline.push(x)) );
+
+/* ---------- final preference ---------- */
+timeline.push({ type: jsPsychSurveyMultiChoice, preamble:'<h3>Comparing the three sections</h3>', questions:[
+  {prompt:'Which section felt most HONEST (least forced)?', options:['Choosing one word','Rating each word','Matching words to segments',"I don't know"], required:true, name:'most_honest'},
+  {prompt:'Which was EASIEST?', options:['Choosing one word','Rating each word','Matching words to segments',"I don't know"], required:true, name:'easiest'},
+  {prompt:'Which did you PREFER overall?', options:['Choosing one word','Rating each word','Matching words to segments',"I don't know"], required:true, name:'preferred'}
+], data:{task:'final_pref'} });
+timeline.push({ type: jsPsychSurveyHtmlForm, button_label:'Finish',
+  html:'<p>Anything confusing, tiring, or that you would change? (optional)</p><textarea name="feedback" rows="3" cols="50"></textarea>',
+  data:{task:'final_open'} });
+
+/* ---------- save ---------- */
+timeline.push({ type: jsPsychCallFunction, async:true, func: async function(done){
+  const filename='pilot_'+PID+'_'+Date.now()+'.csv';
+  // keep only the final answer per trial (Back can create earlier revisit rows)
+  const maxSeq={}; jsPsych.data.get().values().forEach(r=>{ if(r.nav_seq!=null){ maxSeq[r.trial_id]=Math.max(maxSeq[r.trial_id]??-1, r.nav_seq); } });
+  const csv=jsPsych.data.get().filterCustom(function(r){ return r.nav_seq==null || r.nav_seq===maxSeq[r.trial_id]; }).csv();
+  if(DATAPIPE_ID && DATAPIPE_ID!=='YOUR_DATAPIPE_ID'){
+    try{ await fetch('https://pipe.jatos.org/api/data',{ method:'POST',
+      headers:{'Content-Type':'application/json','Accept':'*/*'},
+      body:JSON.stringify({ experimentID:DATAPIPE_ID, filename:filename, data:csv }) }); }
+    catch(e){ jsPsych.data.get().localSave('csv',filename); }
+  } else { jsPsych.data.get().localSave('csv',filename); }
+  done();
+}});
+timeline.push({ type: jsPsychHtmlKeyboardResponse, choices:'NO_KEYS', stimulus:'<h2>All done — thank you!</h2><p>You can close this tab.</p>' });
+
+jsPsych.run(timeline);
+</script>
+</html>
