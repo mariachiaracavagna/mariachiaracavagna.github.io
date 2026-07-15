@@ -15,35 +15,117 @@
   <script src="lib/plugin-call-function.js"></script>
   <script src="lib/sortable.js"></script>
   <link  href="lib/jspsych.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="experiment_trials.js"></script>
   <style>
-    .seg{margin:10px 0}
-    .seglabel{margin-bottom:4px}
-    .seglabel.ref{font-weight:bold}
-    audio{width:320px;max-width:90vw}
-    #listen-hint{color:#c62828;margin:12px 0;font-weight:bold}
-    .jspsych-content{max-width:760px}
-    table.assign td{padding:6px 10px;text-align:left;vertical-align:middle}
-    .ratehdr{text-align:center;font-size:12px;color:#555;line-height:1.2}
+    /* ===== tweakable props =====
+       --accent      : recolors progress bar, Reference framing, selected answers,
+                       slider fill/thumb and the Continue button. Players stay grey.
+       --pole-color / --pole-weight : slider endpoint emphasis
+                       (prominent = #46463f / 600, subtle = #8a8a84 / 400). */
+    :root{
+      --accent:#3247ff;
+      --accent-tint:rgba(50,71,255,.07);
+      --accent-tint-strong:rgba(50,71,255,.12);
+      --bg:#fbfbfa; --card:#fff;
+      --text:#1c1c1a; --text-2:#46463f; --muted:#8a8a84; --faint:#a8a89f;
+      --line:#ececea; --line-2:#e4e4e0; --line-3:#dededa;
+      --warn:#b0752a;
+      --player:#8a8a84;
+      --pole-color:#46463f; --pole-weight:600;
+      --font:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;
+    }
+    html,body{background:var(--bg)}
+    body,.jspsych-display-element,.jspsych-btn,input,select,textarea,button{font-family:var(--font)}
+    .jspsych-display-element{color:var(--text);font-size:16px}
+    .jspsych-content-wrapper{background:var(--bg)}
+    .jspsych-content{max-width:600px;padding:12px 24px 16px;text-wrap:pretty}
+    h1,h2,h3,h4{color:var(--text);text-wrap:pretty}
+    h2,h3,h4{font-size:15px;font-weight:600;margin:0 0 6px}
+    p{color:var(--text-2);line-height:1.45;text-wrap:pretty}
+
+    /* progress bar */
+    #jspsych-progressbar-container{background:var(--bg);border-bottom:1px solid var(--line);color:var(--muted)}
+    #jspsych-progressbar-container span{font-size:12px;color:var(--muted)}
+    #jspsych-progressbar-outer{background:var(--line-2);border-radius:7px;overflow:hidden}
+    #jspsych-progressbar-inner{background:var(--accent);border-radius:7px}
+
+    /* prompt */
+    .prompt{font-size:18px;font-weight:500;line-height:1.3;text-align:center;color:var(--text);margin:0 0 4px}
+    .prompt strong{font-weight:700}
+
+    /* players — always grey, never accent */
+    #players{display:flex;flex-direction:column;gap:7px;align-items:center;margin:9px 0}
+    .seg{display:flex;flex-direction:column;gap:2px;align-items:flex-start}
+    .seglabel{font-size:13px;font-weight:700;color:var(--text-2);letter-spacing:.02em}
+    .player-card{background:var(--card);border:1px solid var(--line-2);border-radius:10px;padding:5px 12px}
+    audio{width:320px;max-width:82vw;display:block;filter:grayscale(1)}
+
+    /* reference: framed row, grey player inside */
+    .seg.is-ref{border:1px solid var(--accent);background:var(--accent-tint);border-radius:12px;padding:5px 8px 7px}
+    .seg.is-ref .seglabel{color:var(--accent);letter-spacing:.04em;text-transform:uppercase}
+
+    #listen-hint{color:var(--warn);font-size:13px;text-align:center;margin:9px 0 0}
+
+    /* answer options */
+    .opt{display:flex;align-items:center;gap:9px;padding:7px 10px;border:1px solid var(--line-2);border-radius:10px;
+         background:var(--card);cursor:pointer;font-size:16px;color:var(--text)}
+    .opt+.opt{margin-top:6px}
+    .opt input{accent-color:var(--accent);margin:0}
+    .opt:hover{border-color:var(--line-3)}
+    .opt.sel{background:var(--accent-tint);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+    .optlist{display:block;text-align:left;margin:9px auto 0;max-width:340px}
+
+    table.assign{margin:9px auto 0;border-collapse:collapse}
+    table.assign td{padding:6px 10px;text-align:left;vertical-align:middle;font-size:16px;color:var(--text)}
+    table.assign input[type=radio]{accent-color:var(--accent)}
+    .ratehdr{text-align:center;font-size:12px;color:var(--muted);line-height:1.2;font-weight:400}
     select{font-size:15px;padding:3px}
-    .forced-wrap{margin:22px auto 0;padding-top:14px;border-top:1px solid #ddd;max-width:380px}
-    .forced-slider{width:100%;display:block;margin:0;-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;background:#1565c0;outline:none}
-    .forced-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:#0d47a1;cursor:pointer;border:2px solid #fff;box-shadow:0 0 2px rgba(0,0,0,.4)}
-    .forced-slider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#0d47a1;cursor:pointer;border:2px solid #fff}
-    .forced-slider::-moz-range-track{height:6px;border-radius:3px;background:#1565c0}
-    .forced-slider::-moz-range-progress{height:6px;border-radius:3px;background:#1565c0}
-    .forced-poles{display:flex;justify-content:space-between;font-size:13px;color:#555;margin-top:4px}
+
+    /* bipolar slider: neutral track, centre tick, accent fill grows out from the centre */
+    .forced-wrap{margin:14px auto 0;padding-top:12px;border-top:1px solid var(--line);max-width:380px}
+    .forced-q{font-size:15px;font-weight:600;color:var(--text);text-align:center;margin:0 0 9px}
+    .forced-track{position:relative;height:22px}
+    .forced-rail{position:absolute;top:8px;left:0;right:0;height:6px;border-radius:3px;background:var(--line-2)}
+    .forced-fill{position:absolute;top:8px;height:6px;border-radius:3px;background:var(--accent);left:50%;width:0}
+    .forced-tick{position:absolute;top:5px;left:50%;width:1px;height:12px;background:var(--faint);transform:translateX(-.5px)}
+    .forced-slider{position:absolute;top:0;left:0;width:100%;height:22px;margin:0;background:none;
+                   -webkit-appearance:none;appearance:none;outline:none;cursor:pointer}
+    .forced-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;
+                   background:var(--accent);border:2px solid var(--card);box-shadow:0 0 0 1px var(--line-3);cursor:pointer}
+    .forced-slider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--accent);
+                   border:2px solid var(--card);box-shadow:0 0 0 1px var(--line-3);cursor:pointer}
+    .forced-slider::-moz-range-track{background:none}
+    .forced-poles{display:flex;justify-content:space-between;gap:12px;font-size:12px;margin-top:6px;
+                  color:var(--pole-color);font-weight:var(--pole-weight)}
     .forced-poles span:last-child{text-align:right}
-    #players .dz-row{display:grid;grid-template-columns:64px 320px 176px;align-items:center;column-gap:16px;margin:8px 0;justify-content:center}
-    .dz-label{font-weight:bold;text-align:right;white-space:nowrap}
+    .forced-poles .lit{color:var(--accent)}
+
+    /* v3 match */
+    #players .dz-row{display:grid;grid-template-columns:60px 320px 170px;align-items:center;column-gap:14px;justify-content:center}
+    .dz-label{font-size:13px;font-weight:700;color:var(--text-2);text-align:right;white-space:nowrap}
     .dz-audio{width:320px}
-    .slot{width:170px;min-height:42px;border:2px dashed #bbb;border-radius:22px;display:flex;align-items:center;justify-content:center;padding:3px;box-sizing:border-box}
-    .slot.filled{border-style:solid;border-color:#333}
+    .slot{width:170px;min-height:40px;border:1px dashed var(--line-3);border-radius:10px;display:flex;align-items:center;
+          justify-content:center;padding:3px;box-sizing:border-box;background:var(--card)}
+    .slot.filled{border-style:solid;border-color:var(--accent);background:var(--accent-tint)}
     .slot .chip{border:none;background:transparent;padding:6px 10px}
-    .bank{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:8px;min-height:46px;padding:10px}
-    .chip{background:#fff;border:2px solid #333;border-radius:22px;padding:8px 16px;cursor:grab;user-select:none;font-size:15px;white-space:nowrap}
+    .bank{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;margin-top:9px;min-height:44px;padding:9px}
+    .chip{background:var(--card);border:1px solid var(--line-3);border-radius:10px;padding:7px 14px;cursor:grab;
+          user-select:none;font-size:16px;color:var(--text);white-space:nowrap}
     .chip:active{cursor:grabbing}
     .sortable-ghost{opacity:.4}
+    .hint{font-size:12px;color:var(--muted);text-align:center;margin:9px 0 2px}
+
+    /* buttons */
+    .jspsych-btn{font-size:16px;font-weight:600;padding:9px 20px;border-radius:10px;border:none;
+                 background:var(--accent);color:#fff;cursor:pointer;transition:opacity .12s}
+    .jspsych-btn:hover{background:var(--accent);opacity:.9}
+    .jspsych-btn:disabled,.jspsych-btn:disabled:hover{background:#ededea;color:#b0b0a8;cursor:not-allowed;opacity:1}
+    .btn-back{background:var(--card);color:var(--text-2);border:1px solid var(--line-3)}
+    .btn-back:hover{background:var(--card);border-color:var(--muted);opacity:1}
+    textarea{font-size:15px;border:1px solid var(--line-2);border-radius:10px;padding:8px;color:var(--text)}
   </style>
 </head>
 <body></body>
@@ -83,24 +165,40 @@ let GOING_BACK = false;
 const sh = a => jsPsych.randomization.shuffle(a);
 function playersHTML(segments){
   let h='<div id="players">';
-  segments.forEach((s,i)=>{ h+='<div class="seg"><div class="seglabel'+(s.isRef?' ref':'')+'">'
-    +s.label+(s.isRef?'  (compare the others to this)':'')+'</div>'
-    +'<audio id="aud'+i+'" src="'+s.url+'" controls preload="auto"></audio></div>'; });
-  h+='</div><div id="listen-hint">Listen fully to all '+segments.length+' segments to continue.</div>';
+  segments.forEach((s,i)=>{ h+='<div class="seg'+(s.isRef?' is-ref':'')+'"><div class="seglabel">'
+    +s.label+'</div>'
+    +'<div class="player-card"><audio id="aud'+i+'" src="'+s.url+'" controls preload="auto"></audio></div></div>'; });
+  h+='</div><div id="listen-hint">Please play each clip to the end before continuing.</div>';
   return h;
 }
 // the forcedness slider markup, placed at the bottom of every trial's form
 function sliderHTML(){
-  return '<div class="forced-wrap"><p style="margin-bottom:6px"><strong>Are you happy with your choice?</strong></p>'
-    +'<input type="range" min="0" max="100" value="50" name="forcedness" class="forced-slider">'
-    +'<div class="forced-poles"><span>choice felt forced</span>'
-    +'<span>choice felt truthful</span></div></div>';
+  return '<div class="forced-wrap"><p class="forced-q">How did this choice feel?</p>'
+    +'<div class="forced-track"><div class="forced-rail"></div><div class="forced-fill"></div><div class="forced-tick"></div>'
+    +'<input type="range" min="0" max="100" value="50" name="forcedness" class="forced-slider"></div>'
+    +'<div class="forced-poles"><span class="pole-l">My choice felt forced</span>'
+    +'<span class="pole-r">My choice felt truthful</span></div></div>';
+}
+// bipolar paint: accent fill grows from the centre toward the thumb; the leaned-to pole lights up
+function paintSlider(root){
+  const s=root.querySelector('.forced-slider'); if(!s) return;
+  const fill=root.querySelector('.forced-fill'), L=root.querySelector('.pole-l'), R=root.querySelector('.pole-r');
+  const paint=()=>{ const v=+s.value;
+    fill.style.left=Math.min(v,50)+'%'; fill.style.width=Math.abs(v-50)+'%';
+    L.classList.toggle('lit', v<50); R.classList.toggle('lit', v>50); };
+  s.addEventListener('input',paint); paint();
+}
+// tint the chosen option row (accent ring + faint accent background)
+function markSelected(root){
+  const opts=Array.from(root.querySelectorAll('.opt')); if(!opts.length) return;
+  const sync=()=>opts.forEach(o=>o.classList.toggle('sel', o.querySelector('input').checked));
+  opts.forEach(o=>o.querySelector('input').addEventListener('change',sync)); sync();
 }
 function controlsIn(root){ return Array.from(root.querySelectorAll('input[type=submit], button[type=submit], .jspsych-btn')); }
 function wireGating(root, controls, trialId, startUnlocked){
   const audios=Array.from(root.querySelectorAll('#players audio'));
   const played=audios.map(()=>false), lastT=audios.map(()=>0);
-  const setD=v=>controls.forEach(c=>{ c.disabled=v; c.style.opacity=v?0.4:1; c.style.pointerEvents=v?'none':'auto'; });
+  const setD=v=>controls.forEach(c=>{ c.disabled=v; });
   audios.forEach(a=>a.addEventListener('play',()=>audios.forEach(o=>{ if(o!==a) o.pause(); }))); // one at a time
   if(startUnlocked){ setD(false); const h=root.querySelector('#listen-hint'); if(h) h.style.display='none'; return; } // already heard on an earlier visit
   setD(true);
@@ -116,6 +214,8 @@ function wireGating(root, controls, trialId, startUnlocked){
 function wireForm(root, extraValidate){
   const form=root.querySelector('form');
   const s=root.querySelector('.forced-slider');
+  paintSlider(root);
+  markSelected(root);
   if(s) s.addEventListener('input',()=>{ s.dataset.moved='1'; });
   form.addEventListener('submit',function(e){
     if(GOING_BACK) return; // going back: don't validate, just leave this trial
@@ -128,7 +228,7 @@ function addBackButton(root){
   const submitBtn=controlsIn(root)[0]; if(!submitBtn) return;
   const form=root.querySelector('form');
   const back=document.createElement('button');
-  back.type='button'; back.textContent='◀ Back'; back.className='jspsych-btn'; back.style.marginRight='10px';
+  back.type='button'; back.textContent='Back'; back.className='jspsych-btn btn-back'; back.style.marginRight='10px';
   back.addEventListener('click',function(){
     GOING_BACK=true;
     form.querySelectorAll('[required]').forEach(el=>el.removeAttribute('required'));
@@ -150,10 +250,10 @@ const forced = respVal => (100 - (+respVal))/100; // left=forced(1) .. right=tru
 function buildChoose(t){
   const {segs,presented_order}=refSegments(t);
   const choices=sh(t.choices.slice());
-  const radios=choices.map(c=>'<label style="display:block;margin:5px 0"><input type="radio" name="tag" value="'+c.word+'" required> '+c.word+'</label>').join('');
+  const radios=choices.map(c=>'<label class="opt"><input type="radio" name="tag" value="'+c.word+'" required> '+c.word+'</label>').join('');
   return {
-    preamble:'<p><strong>The final segment is the Reference.</strong> Which single word best describes how the Reference sounds compared to the other segments?</p>'+playersHTML(segs),
-    html:'<div style="text-align:left;display:inline-block">'+radios+'</div>'+sliderHTML(),
+    preamble:'<p class="prompt">Compared with the segments above it, which single word best describes how the <strong>Reference</strong> sounds?</p>'+playersHTML(segs),
+    html:'<div class="optlist">'+radios+'</div>'+sliderHTML(),
     data:{task:'tag', version:(t.version==='practice'?'practice':'v1'), response_format:'choose', practice:(t.version==='practice'),
           trial_id:t.trial_id, track_id:t.track_id, ref_eq:t.ref_eq, presented_order:presented_order,
           choice_map:Object.fromEntries(choices.map(c=>[c.word,c.method]))},
@@ -181,7 +281,7 @@ function buildRate(t){
     rows+='<tr><td>'+c.word+'</td>'+cells+'</tr>'; });
   rows+='</table>';
   return {
-    preamble:'<p><strong>The final segment is the Reference.</strong> Rate how accurately each word describes how the Reference sounds compared to the other segments.</p>'+playersHTML(segs),
+    preamble:'<p class="prompt">Compared with the segments above it, rate how accurately each word describes how the <strong>Reference</strong> sounds.</p>'+playersHTML(segs),
     html:rows+sliderHTML(),
     data:{task:'tag', version:'v2', response_format:'rate', trial_id:t.trial_id, track_id:t.track_id, ref_eq:t.ref_eq,
           presented_order:presented_order, rate_methods:choices.map(c=>c.method), rate_words:choices.map(c=>c.word)},
@@ -209,11 +309,11 @@ function buildMatch(t){
     +'<div class="slot" id="slot-'+i+'" data-i="'+i+'"></div>'
     +'<input type="hidden" name="seg_'+i+'" value="">'
     +'</div>'; });
-  grid+='</div><div id="listen-hint">Listen fully to all 5 tracks to continue.</div>';
+  grid+='</div><div id="listen-hint">Please play each clip to the end before continuing.</div>';
   const bank='<div id="tagbank" class="bank">'+pool.map(w=>'<div class="chip" data-tag="'+w+'">'+w+'</div>').join('')+'</div>';
   return {
-    preamble:'<p><strong>Drag each word into the slot beside the track you think it best describes.</strong> Every word is used exactly once.</p>',
-    html:grid+'<p style="font-size:13px;color:#555;text-align:center;margin:10px 0 2px">Drag the words below up into the slots</p>'+bank+sliderHTML(),
+    preamble:'<p class="prompt">Drag each word into the slot beside the track it <strong>best describes</strong>. Every word is used exactly once.</p>',
+    html:grid+'<p class="hint">Drag the words below up into the slots</p>'+bank+sliderHTML(),
     data:{task:'match', version:'v3', trial_id:t.trial_id, track_id:t.track_id, model:t.model,
           seg_true:segList.map(s=>s.true_tag), seg_eq:segList.map(s=>s.eq), tag_pool:pool},
     onLoad:function(root, opts){
@@ -287,7 +387,7 @@ timeline.push({ type: jsPsychHtmlButtonResponse,
   choices:['I agree — continue'] });
 
 timeline.push({ type: jsPsychHtmlButtonResponse,
-  stimulus:'<h3>Headphone check</h3><p>Put on your headphones and set a comfortable volume with the clip below. You should hear it clearly in both ears.</p><audio src="'+TRIALS.practice.ref_url+'" controls preload="auto" style="width:320px"></audio><p style="font-size:13px;color:#555">If you can\'t hear it, raise your volume or check your headphones.</p>',
+  stimulus:'<h3>Headphone check</h3><p>Put on your headphones and set a comfortable volume with the clip below. You should hear it clearly in both ears.</p><audio src="'+TRIALS.practice.ref_url+'" controls preload="auto" style="width:320px"></audio><p class="hint">If you can\'t hear it, raise your volume or check your headphones.</p>',
   choices:['Quit','I can hear it clearly'], data:{task:'headphone_check'},
   on_finish:function(d){ if(d.response===0){ jsPsych.abortExperiment('Thanks for your time — you can close this tab.'); } } });
 
