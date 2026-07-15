@@ -65,11 +65,12 @@
 
     /* players — always grey, never accent.
        Labels sit beside the player (not above) to keep a whole trial on one screen. */
-    #players{display:flex;flex-direction:column;gap:clamp(4px,1vh,8px);align-items:center;margin:clamp(8px,1.4vh,14px) 0 0}
-    .seg{display:grid;grid-template-columns:88px 320px;align-items:center;column-gap:10px}
+    #players{display:flex;flex-direction:column;gap:clamp(4px,1vh,8px);align-items:center;margin:clamp(8px,1.4vh,14px) 0 0;
+             max-width:100%}
+    .seg{display:grid;grid-template-columns:88px minmax(0,320px);align-items:center;column-gap:10px;max-width:100%}
     .seglabel{font-size:13px;font-weight:700;color:var(--text-2);letter-spacing:.02em;text-align:right}
     /* native player sits directly on the page; grayscale + a slight darkening for contrast */
-    audio{width:320px;max-width:82vw;height:clamp(42px,5.2vh,46px);display:block;margin-inline:auto;filter:grayscale(1) brightness(.85)}
+    audio{width:100%;max-width:320px;height:clamp(42px,5.2vh,46px);display:block;margin-inline:auto;filter:grayscale(1) brightness(.85)}
 
     /* reference: framed row, grey player inside */
     .seg.is-ref{border:1px solid var(--accent);background:var(--accent-tint);border-radius:12px;
@@ -113,9 +114,10 @@
     .forced-poles span:last-child{text-align:right}
 
     /* v3 match */
-    #players .dz-row{display:grid;grid-template-columns:88px 320px 160px;align-items:center;column-gap:10px;justify-content:center}
+    #players .dz-row{display:grid;grid-template-columns:88px minmax(0,320px) 160px;align-items:center;column-gap:10px;
+                     justify-content:center;max-width:100%}
     .dz-label{font-size:13px;font-weight:700;color:var(--text-2);text-align:right;white-space:nowrap}
-    .dz-audio{width:320px}
+    .dz-audio{width:100%;max-width:320px}
     .slot{width:160px;min-height:36px;border:1px dashed var(--line-3);border-radius:10px;display:flex;align-items:center;
           justify-content:center;padding:2px;box-sizing:border-box;background:var(--card)}
     .slot.filled{border-style:solid;border-color:var(--accent);background:var(--accent-tint)}
@@ -126,6 +128,34 @@
     .chip:active{cursor:grabbing}
     .sortable-ghost{opacity:.4}
     .hint{font-size:12px;color:var(--muted);text-align:center;margin:8px 0 2px}
+
+    /* ===== narrow screens (phones) =====
+       Nothing may exceed the viewport width: the page must never pan sideways.
+       Vertical scrolling is fine. Rows stack instead of shrinking the player,
+       and in v3 each slot stays paired with its own segment so a drag is always
+       a short, local gesture rather than a trip across the page. */
+    @media (max-width:560px){
+      .jspsych-content{padding-left:12px;padding-right:12px;max-width:100%}
+      .seg{grid-template-columns:minmax(0,1fr);row-gap:1px;justify-items:center;width:100%}
+      .seglabel{text-align:left;align-self:start;width:100%;max-width:320px}
+      .seg.is-ref{padding:5px 8px 7px}
+      audio{max-width:100%}
+
+      #players .dz-row{grid-template-columns:minmax(0,1fr) auto;
+                       grid-template-areas:"label slot" "audio audio";row-gap:3px;column-gap:8px;width:100%}
+      .dz-label{grid-area:label;text-align:left;align-self:center}
+      .dz-audio{grid-area:audio;max-width:100%}
+      .slot{grid-area:slot;width:150px;justify-self:end}
+      .bank{gap:7px;padding:2px}
+      .forced-poles{font-size:12px;gap:10px}
+      .optlist{max-width:100%}
+      /* the 6-column rating grid is the widest thing in the study — let it use the
+         full width and give the radio columns only the room they need */
+      table.assign{width:100%}
+      table.assign td{padding:5px 2px;font-size:15px}
+      table.assign td:first-child{padding-right:6px}
+      .ratehdr{font-size:11px}
+    }
 
     /* buttons */
     .jspsych-btn{font-size:16px;font-weight:600;padding:8px 20px;border-radius:10px;border:none;
@@ -324,8 +354,13 @@ function buildMatch(t){
       const setHidden=()=>slots.forEach(sl=>{ const chip=sl.querySelector('.chip'); sl.classList.toggle('filled',!!chip);
         root.querySelector('input[name=seg_'+sl.dataset.i+']').value = chip?chip.dataset.tag:''; });
       const grp={name:'tags', pull:true, put:function(to){ return to.el.id==='tagbank' || to.el.children.length===0; }};
-      new Sortable(root.querySelector('#tagbank'),{group:grp,animation:120,onSort:setHidden,onAdd:setHidden,onRemove:setHidden});
-      slots.forEach(sl=> new Sortable(sl,{group:grp,animation:120,onSort:setHidden,onAdd:setHidden,onRemove:setHidden}));
+      /* touch: a short press-and-hold starts the drag, so an ordinary swipe that happens to
+         begin on a chip still scrolls the page. Auto-scroll keeps distant slots reachable. */
+      const sortOpts={group:grp, animation:120, delay:150, delayOnTouchOnly:true, touchStartThreshold:5,
+                      scroll:true, scrollSensitivity:60, scrollSpeed:12, fallbackTolerance:5,
+                      onSort:setHidden, onAdd:setHidden, onRemove:setHidden};
+      new Sortable(root.querySelector('#tagbank'), Object.assign({}, sortOpts));
+      slots.forEach(sl=> new Sortable(sl, Object.assign({}, sortOpts)));
       if(st&&st.assign){ st.assign.forEach((tag,i)=>{ if(tag){ const chip=Array.from(root.querySelectorAll('#tagbank .chip')).find(c=>c.dataset.tag===tag); const slot=root.querySelector('#slot-'+i); if(chip&&slot) slot.appendChild(chip); } }); }
       setHidden();
       if(st){ const sl=root.querySelector('.forced-slider'); if(sl&&st.forcedness!=null){ sl.value=st.forcedness; sl.dataset.moved='1'; } }
@@ -424,7 +459,7 @@ timeline.push({ type: jsPsychHtmlButtonResponse,
   choices:['I agree — continue'] });
 
 timeline.push({ type: jsPsychHtmlButtonResponse,
-  stimulus:'<h3>Headphone check</h3><p>Put on your headphones and set a comfortable volume with the clip below. You should hear it clearly in both ears.</p><audio src="'+TRIALS.practice.ref_url+'" controls preload="auto" style="width:320px"></audio><p class="hint">If you can\'t hear it, raise your volume or check your headphones.</p>',
+  stimulus:'<h3>Headphone check</h3><p>Put on your headphones and set a comfortable volume with the clip below. You should hear it clearly in both ears.</p><audio src="'+TRIALS.practice.ref_url+'" controls preload="auto" style="width:320px;max-width:100%"></audio><p class="hint">If you can\'t hear it, raise your volume or check your headphones.</p>',
   choices:['Quit','I can hear it clearly'],
   button_html:(choice,i)=>'<button class="jspsych-btn'+(i===0?' btn-back':'')+'">'+choice+'</button>',
   data:{task:'headphone_check'},
