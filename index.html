@@ -510,21 +510,41 @@ timeline.push({ type: jsPsychSurveyHtmlForm, button_label:'Finish',
   data:{task:'final_open'} });
 
 /* ---------- save ---------- */
+// records how the save went, so the final screen can report a server failure
+// (and DataPipe's actual error message) instead of silently downloading.
+let SAVE_RESULT = { ok:true, detail:'' };
 timeline.push({ type: jsPsychCallFunction, async:true, func: async function(done){
   setUnloadGuard(false);   // answering is over — don't prompt on the way out
   const filename='pilot_'+PID+'_'+Date.now()+'.csv';
   // keep only the final answer per trial (Back can create earlier revisit rows)
   const maxSeq={}; jsPsych.data.get().values().forEach(r=>{ if(r.nav_seq!=null){ maxSeq[r.trial_id]=Math.max(maxSeq[r.trial_id]??-1, r.nav_seq); } });
   const csv=jsPsych.data.get().filterCustom(function(r){ return r.nav_seq==null || r.nav_seq===maxSeq[r.trial_id]; }).csv();
-  if(DATAPIPE_ID && DATAPIPE_ID!=='YOUR_DATAPIPE_ID'){
-    try{ await fetch('https://pipe.jatos.org/api/data',{ method:'POST',
+  // POST to DataPipe, then CHECK the response — fetch does not throw on HTTP 4xx/5xx,
+  // so an unchecked call can "succeed" while DataPipe actually rejected the data.
+  async function sendToPipe(){
+    const resp = await fetch('https://pipe.jatos.org/api/data',{ method:'POST',
       headers:{'Content-Type':'application/json','Accept':'*/*'},
-      body:JSON.stringify({ experimentID:DATAPIPE_ID, filename:filename, data:csv }) }); }
-    catch(e){ jsPsych.data.get().localSave('csv',filename); }
-  } else { jsPsych.data.get().localSave('csv',filename); }
+      body:JSON.stringify({ experimentID:DATAPIPE_ID, filename:filename, data:csv }) });
+    const body = await resp.text().catch(()=> '');
+    if(!resp.ok) throw new Error('DataPipe rejected the upload (HTTP '+resp.status+'): '+(body||'(no message returned)'));
+    return body;
+  }
+  if(DATAPIPE_ID && DATAPIPE_ID!=='YOUR_DATAPIPE_ID'){
+    try{ await sendToPipe(); SAVE_RESULT={ ok:true, detail:'' }; }
+    catch(e){ SAVE_RESULT={ ok:false, detail:String((e&&e.message)||e) }; jsPsych.data.get().localSave('csv',filename); }
+  } else { SAVE_RESULT={ ok:false, detail:'DATAPIPE_ID is still the placeholder — nothing was sent to the server.' }; jsPsych.data.get().localSave('csv',filename); }
   done();
 }});
-timeline.push({ type: jsPsychHtmlKeyboardResponse, choices:'NO_KEYS', stimulus:'<h2>All done — thank you!</h2><p>You can close this tab.</p>' });
+timeline.push({ type: jsPsychHtmlKeyboardResponse, choices:'NO_KEYS', stimulus:function(){
+  if(SAVE_RESULT.ok) return '<h2>All done — thank you!</h2><p>You can close this tab.</p>';
+  return '<div style="max-width:640px;margin:0 auto;text-align:left">'
+    +'<h2>All done — thank you!</h2>'
+    +'<p>Your responses were saved to a file on your device (a download should have appeared). You can close this tab.</p>'
+    +'<p style="color:#b0752a;font-size:13px;margin-top:16px;border-top:1px solid #eee;padding-top:12px">'
+    +'<strong>Note for the researcher:</strong> the upload to the server did not go through, so the data was downloaded locally instead. Reason:</p>'
+    +'<pre style="font-size:12px;white-space:pre-wrap;word-break:break-word;background:#faf6ef;padding:10px;border-radius:8px;color:#5a4a2a">'
+    +String(SAVE_RESULT.detail).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</pre></div>';
+}});
 
 RUNNING = true;
 setUnloadGuard(true);
