@@ -170,7 +170,7 @@
 <body></body>
 <script>
 /* ===== CONFIG: set DATAPIPE_ID after creating a free experiment at
-   https://pipe.jatos.org . Leave as placeholder to test locally
+   https://pipe.jspsych.org . Leave as placeholder to test locally
    (data downloads to your computer at the end). ===== */
 const DATAPIPE_ID = "Pqtt6yAMupO8";
 
@@ -526,7 +526,7 @@ timeline.push({ type: jsPsychCallFunction, async:true, func: async function(done
   // POST to DataPipe, then CHECK the response — fetch does not throw on HTTP 4xx/5xx,
   // so an unchecked call can "succeed" while DataPipe actually rejected the data.
   async function sendToPipe(){
-    const resp = await fetch('https://pipe.jatos.org/api/data',{ method:'POST',
+    const resp = await fetch('https://pipe.jspsych.org/api/data',{ method:'POST',
       headers:{'Content-Type':'application/json','Accept':'*/*'},
       body:JSON.stringify({ experimentID:DATAPIPE_ID, filename:filename, data:csv }) });
     const body = await resp.text().catch(()=> '');
