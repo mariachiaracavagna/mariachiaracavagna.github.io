@@ -206,6 +206,10 @@ window.addEventListener('error', function(e){
 const jsPsych = initJsPsych({ show_progress_bar:true, message_progress_bar:'Progress', auto_update_progress_bar:false });
 
 const urlp = new URLSearchParams(window.location.search);
+// TESTING ONLY: add ?fast=1 to the URL to skip the force-listen lock (continue without
+// hearing full tracks, and allow seeking). Off by default, so real participants are
+// always gated normally. Do not share a link containing ?fast=1 with participants.
+const FAST_LISTEN = urlp.has('fast');
 const PID = urlp.get('id') || urlp.get('PROLIFIC_PID') || jsPsych.randomization.randomID(8);
 const VERSION_ORDER = jsPsych.randomization.shuffle(['v1','v2','v3']);
 jsPsych.data.addProperties({ participant_id:PID, version_order:VERSION_ORDER.join('>') });
@@ -255,7 +259,7 @@ function wireGating(root, controls, trialId, startUnlocked){
   const played=audios.map(()=>false), lastT=audios.map(()=>0);
   const setD=v=>controls.forEach(c=>{ c.disabled=v; });
   audios.forEach(a=>a.addEventListener('play',()=>audios.forEach(o=>{ if(o!==a) o.pause(); }))); // one at a time
-  if(startUnlocked){ setD(false); const h=root.querySelector('#listen-hint'); if(h) h.style.display='none'; return; } // already heard on an earlier visit
+  if(startUnlocked || FAST_LISTEN){ setD(false); const h=root.querySelector('#listen-hint'); if(h) h.style.display='none'; return; } // already heard on an earlier visit, or ?fast=1 testing mode
   setD(true);
   audios.forEach((a,idx)=>{
     a.addEventListener('timeupdate',()=>{ if(!a.seeking && a.currentTime>lastT[idx]+1.0 && !played[idx]) a.currentTime=lastT[idx]; else lastT[idx]=a.currentTime; });
