@@ -174,7 +174,21 @@
    (data downloads to your computer at the end). ===== */
 const DATAPIPE_ID = "Pqtt6yAMupO8";
 
+/* Only OUR OWN scripts may trigger the failure screen, and only before the run starts.
+   Browser extensions inject scripts into the page and their errors surface on our window
+   (Safari reports them from webkit-masked-url://hidden/, e.g. "Can't find variable:
+   EmptyRanges"). Wiping the page over one of those aborts a real session and loses the
+   participant's data, so anything from outside the experiment is logged and ignored. */
+let RUNNING = false;
+const OUR_BASE = location.href.replace(/[?#].*$/,'').replace(/[^/]*$/,'');
+function isOurScript(src){
+  if(!src) return false;                                  // masked/cross-origin: not ours
+  if(src.indexOf(OUR_BASE)===0) return true;              // same folder (works over file:// too)
+  return location.origin && location.origin!=='null' && src.indexOf(location.origin)===0;
+}
 window.addEventListener('error', function(e){
+  if(!isOurScript(e.filename)){ console.warn('Ignoring error from outside the experiment:', e.filename||'(masked)', e.message); return; }
+  if(RUNNING){ console.error('Error during run (session kept alive):', e.message, e.filename, e.lineno); return; }
   document.body.innerHTML = '<div style="max-width:700px;margin:40px auto;font-family:system-ui;color:#c62828">'
     +'<h3>Something failed to load</h3><p>'+(e.message||e)+'</p>'
     +'<p>Check that the <code>lib</code> folder and <code>experiment_trials.js</code> are next to <code>index.html</code>.</p></div>';
@@ -502,6 +516,7 @@ timeline.push({ type: jsPsychCallFunction, async:true, func: async function(done
 }});
 timeline.push({ type: jsPsychHtmlKeyboardResponse, choices:'NO_KEYS', stimulus:'<h2>All done — thank you!</h2><p>You can close this tab.</p>' });
 
+RUNNING = true;
 jsPsych.run(timeline);
 </script>
 </html>
