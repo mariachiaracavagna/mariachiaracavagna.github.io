@@ -210,6 +210,15 @@ const PID = urlp.get('id') || urlp.get('PROLIFIC_PID') || jsPsych.randomization.
 const VERSION_ORDER = jsPsych.randomization.shuffle(['v1','v2','v3']);
 jsPsych.data.addProperties({ participant_id:PID, version_order:VERSION_ORDER.join('>') });
 
+/* Refresh/close guard. A refresh loses every answer (nothing is persisted until the
+   save step at the end), so ask the browser to confirm. Lifted once the participant is
+   legitimately done — or quits at the headphone check — so we never nag on the way out. */
+function unloadGuard(e){ e.preventDefault(); e.returnValue=''; return ''; }
+function setUnloadGuard(on){
+  if(on) window.addEventListener('beforeunload', unloadGuard);
+  else   window.removeEventListener('beforeunload', unloadGuard);
+}
+
 /* navigation + answer persistence (for Back within a section) */
 const STORE = {};   // trial_id -> saved answer state (restored when a trial is revisited)
 const BUILT = {};   // trial_id -> built trial pieces (stable shuffles across revisits)
@@ -477,7 +486,7 @@ timeline.push({ type: jsPsychHtmlButtonResponse,
   choices:['Quit','I can hear it clearly'],
   button_html:(choice,i)=>'<button class="jspsych-btn'+(i===0?' btn-back':'')+'">'+choice+'</button>',
   data:{task:'headphone_check'},
-  on_finish:function(d){ if(d.response===0){ jsPsych.abortExperiment('Thanks for your time — you can close this tab.'); } } });
+  on_finish:function(d){ if(d.response===0){ setUnloadGuard(false); jsPsych.abortExperiment('Thanks for your time — you can close this tab.'); } } });
 
 timeline.push({ type: jsPsychInstructions, show_clickable_nav:true, pages:[
   '<h3>How it works</h3><p>You will do <strong>three short sections</strong>. In each trial you hear several short segments of the same song and describe how they sound using a few words. The task differs slightly between sections — each is explained when it begins.</p>',
@@ -502,6 +511,7 @@ timeline.push({ type: jsPsychSurveyHtmlForm, button_label:'Finish',
 
 /* ---------- save ---------- */
 timeline.push({ type: jsPsychCallFunction, async:true, func: async function(done){
+  setUnloadGuard(false);   // answering is over — don't prompt on the way out
   const filename='pilot_'+PID+'_'+Date.now()+'.csv';
   // keep only the final answer per trial (Back can create earlier revisit rows)
   const maxSeq={}; jsPsych.data.get().values().forEach(r=>{ if(r.nav_seq!=null){ maxSeq[r.trial_id]=Math.max(maxSeq[r.trial_id]??-1, r.nav_seq); } });
@@ -517,6 +527,7 @@ timeline.push({ type: jsPsychCallFunction, async:true, func: async function(done
 timeline.push({ type: jsPsychHtmlKeyboardResponse, choices:'NO_KEYS', stimulus:'<h2>All done — thank you!</h2><p>You can close this tab.</p>' });
 
 RUNNING = true;
+setUnloadGuard(true);
 jsPsych.run(timeline);
 </script>
 </html>
