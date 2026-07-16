@@ -57,6 +57,13 @@
                   padding:14px 16px;margin:16px 0}
     .doc .callout p:last-child{margin-bottom:0}
 
+    /* section-intro reminders: left-aligned block, centred as a unit under the callout */
+    .reminders{display:inline-block;text-align:left;margin:4px 0 0}
+    .reminders p{margin:0 0 6px}
+    .reminders ul{margin:0;padding-left:18px}
+    .reminders li{color:var(--text-2);line-height:1.45;margin:0 0 6px}
+    .reminders li:last-child{margin-bottom:0}
+
     /* progress bar */
     #jspsych-progressbar-container{background:var(--bg);border-bottom:1px solid var(--line);color:var(--muted)}
     #jspsych-progressbar-container span{font-size:12px;color:var(--muted)}
@@ -459,8 +466,15 @@ const snapStep={ type: jsPsychCallFunction, func:function(){ CUR=stepOf(); jsPsy
 const onlyIf=(kind,node)=>({ timeline:[node], conditional_function:function(){ return CUR.kind===kind; } });
 
 const introNode={ type: jsPsychHtmlButtonResponse,
-  stimulus:function(){ return '<h2>Next section</h2><p>In this section your task is to <strong>'+TASK_DESC[CUR.v]+'</strong> for each trial.</p>'
-    +'<p>Listen to every segment fully. Nothing advances on its own — you choose when to continue, and can change your answer before you do. Use <strong>Back</strong> to return to an earlier trial if you want to revise it, including trials from a previous section. At the bottom of each trial, move the slider to show how forced vs truthful the answer felt.</p>'; },
+  stimulus:function(){ return '<div class="doc"><h2>Next section</h2><div class="callout"><p>In this section your task is to <strong>'+TASK_DESC[CUR.v]+'</strong> for each trial.</p></div></div>'
+    +'<div class="reminders">'
+    +'<p>Remember:</p>'
+    +'<ul>'
+    +'<li>Listen to segments fully before answering;</li>'
+    +'<li>Use <strong>Continue</strong>/<strong>Back</strong> buttons to move across trials;</li>'
+    +'<li>After you answer, move the slider at the bottom of the page to signal how forced vs truthful your choice felt.</li>'
+    +'</ul>'
+    +'</div>'; },
   choices:['Start'], on_finish:advance };
 
 const trialNode={ type: jsPsychSurveyHtmlForm, button_label:'Continue',
