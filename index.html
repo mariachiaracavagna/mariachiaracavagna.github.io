@@ -189,6 +189,14 @@
    (data downloads to your computer at the end). ===== */
 const DATAPIPE_ID = "Pqtt6yAMupO8";
 
+/* ===== CONFIG: Google Apps Script web app — a second, independent copy of each
+   participant's CSV, straight into a Drive folder. See apps_script/Code.gs for
+   setup; paste the deployment's /exec URL here. Leave as placeholder to disable.
+   Neither value is a secret (both ship in this page, like DATAPIPE_ID); the
+   token just keeps strangers who find the URL from writing to the folder. ===== */
+const DRIVE_ENDPOINT = "https://script.google.com/macros/s/AKfycbzHHoFE2roR7EgS-jl_u_l03Hm4Xe887YNEhDO9igutwui9zwG9O2g6oX9hpKT7yUzI/exec";
+const DRIVE_TOKEN    = "hjXQPx0PGYZYcqIF6W5uSxJmRJyBMhjN";
+
 /* Only OUR OWN scripts may trigger the failure screen, and only before the run starts.
    Browser extensions inject scripts into the page and their errors surface on our window
    (Safari reports them from webkit-masked-url://hidden/, e.g. "Can't find variable:
@@ -564,10 +572,41 @@ timeline.push({ type: jsPsychCallFunction, async:true, func: async function(done
     if(!resp.ok) throw new Error('DataPipe rejected the upload (HTTP '+resp.status+'): '+(body||'(no message returned)'));
     return body;
   }
-  if(DATAPIPE_ID && DATAPIPE_ID!=='YOUR_DATAPIPE_ID'){
-    try{ await sendToPipe(); SAVE_RESULT={ ok:true, detail:'' }; }
-    catch(e){ SAVE_RESULT={ ok:false, detail:String((e&&e.message)||e) }; jsPsych.data.get().localSave('csv',filename); }
-  } else { SAVE_RESULT={ ok:false, detail:'DATAPIPE_ID is still the placeholder — nothing was sent to the server.' }; jsPsych.data.get().localSave('csv',filename); }
+  // POST to the Apps Script web app, which files the CSV in a Drive folder.
+  // Sent as text/plain on purpose: it keeps this a "simple" request, so the browser
+  // skips the CORS preflight that Apps Script does not answer. Apps Script still
+  // reads the raw body, so the JSON arrives intact.
+  async function sendToDrive(){
+    const resp = await fetch(DRIVE_ENDPOINT,{ method:'POST', redirect:'follow',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({ token:DRIVE_TOKEN, filename:filename, data:csv }) });
+    const body = await resp.text().catch(()=> '');
+    if(!resp.ok) throw new Error('Apps Script rejected the upload (HTTP '+resp.status+'): '+(body||'(no message returned)'));
+    // The script reports its own failures (bad token, wrong folder id) in a 200 body,
+    // so a green HTTP status alone does not mean the file was written.
+    if(body && body.indexOf('"ok":false')!==-1) throw new Error('Apps Script error: '+body);
+    return body;
+  }
+  // Both destinations are tried; one success is enough to keep the data safe, so a
+  // DataPipe/OSF outage no longer costs a participant. The local download stays as
+  // the last resort for when both are unreachable.
+  const targets=[];
+  if(DATAPIPE_ID && DATAPIPE_ID!=='YOUR_DATAPIPE_ID') targets.push({name:'DataPipe', run:sendToPipe});
+  else targets.push({name:'DataPipe', skipped:'DATAPIPE_ID is still the placeholder.'});
+  if(DRIVE_ENDPOINT && DRIVE_ENDPOINT!=='YOUR_EXEC_URL') targets.push({name:'Drive', run:sendToDrive});
+  else targets.push({name:'Drive', skipped:'DRIVE_ENDPOINT is still the placeholder.'});
+
+  const notes=[]; let anyOk=false;
+  for(const t of targets){
+    if(t.skipped){ notes.push(t.name+': not configured — '+t.skipped); continue; }
+    try{ await t.run(); anyOk=true; notes.push(t.name+': saved.'); }
+    catch(e){ notes.push(t.name+': FAILED — '+String((e&&e.message)||e)); }
+  }
+  SAVE_RESULT={ ok:anyOk, detail:notes.join('\n') };
+  // Always log: when one destination works the participant sees a clean thank-you,
+  // so the console is the only place a half-broken pipeline shows up during testing.
+  console.log('[save] '+filename+'\n'+SAVE_RESULT.detail);
+  if(!anyOk) jsPsych.data.get().localSave('csv',filename);
   done();
 }});
 timeline.push({ type: jsPsychHtmlKeyboardResponse, choices:'NO_KEYS', stimulus:function(){
