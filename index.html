@@ -52,6 +52,10 @@
     /* long-form pages (welcome/consent) */
     .doc{text-align:center;margin-bottom:4px}
     .doc p{margin:0 0 10px}
+    /* what-you'll-do block, set apart from the surrounding consent prose */
+    .doc .callout{border:1px solid var(--accent);background:var(--accent-tint);border-radius:12px;
+                  padding:14px 16px;margin:16px 0}
+    .doc .callout p:last-child{margin-bottom:0}
 
     /* progress bar */
     #jspsych-progressbar-container{background:var(--bg);border-bottom:1px solid var(--line);color:var(--muted)}
@@ -76,6 +80,10 @@
     .seg.is-ref{border:1px solid var(--accent);background:var(--accent-tint);border-radius:12px;
                 padding:clamp(3px,.7vh,6px) 8px;margin:clamp(2px,.4vh,4px) 0}
     .seg.is-ref .seglabel{color:var(--accent);letter-spacing:.04em;text-transform:uppercase}
+
+    /* task sentence sitting between the context segments and the Reference;
+       .prompt carries the type, this only retunes the spacing for its inline position */
+    .refnote{max-width:440px;margin:clamp(4px,1vh,8px) auto clamp(1px,.3vh,3px)}
 
     #listen-hint{color:var(--warn);font-size:13px;text-align:center;margin:clamp(7px,1.3vh,13px) 0 0}
 
@@ -231,9 +239,12 @@ let GOING_BACK = false;
 
 /* ---------- helpers ---------- */
 const sh = a => jsPsych.randomization.shuffle(a);
-function playersHTML(segments){
+// refNote, when given, is dropped in directly above the Reference row
+function playersHTML(segments, refNote){
   let h='<div id="players">';
-  segments.forEach((s,i)=>{ h+='<div class="seg'+(s.isRef?' is-ref':'')+'"><div class="seglabel">'
+  segments.forEach((s,i)=>{
+    if(s.isRef && refNote) h+='<p class="prompt refnote">'+refNote+'</p>';
+    h+='<div class="seg'+(s.isRef?' is-ref':'')+'"><div class="seglabel">'
     +s.label+'</div>'
     +'<audio id="aud'+i+'" src="'+s.url+'" controls preload="auto"></audio></div>'; });
   h+='</div><div id="listen-hint">Please play each clip to the end before continuing.</div>';
@@ -310,7 +321,8 @@ function buildChoose(t){
   const choices=sh(t.choices.slice());
   const radios=choices.map(c=>'<label class="opt"><input type="radio" name="tag" value="'+c.word+'" required> '+c.word+'</label>').join('');
   return {
-    preamble:'<p class="prompt">Listen to all segments fully. Then, choose from the list below the word that best describes <strong>how the Reference sounds compared with the segments above it</strong>.</p>'+playersHTML(segs),
+    preamble:'<p class="prompt">Listen to the following segments.</p>'
+      +playersHTML(segs,'Now, listen to the Reference and choose from the list below the word that best describes <strong>how the Reference sounds compared with the segments above it</strong>.'),
     html:'<div class="optlist">'+radios+'</div>'+sliderHTML(),
     data:{task:'tag', version:(t.version==='practice'?'practice':'v1'), response_format:'choose', practice:(t.version==='practice'),
           trial_id:t.trial_id, track_id:t.track_id, ref_eq:t.ref_eq, presented_order:presented_order,
@@ -339,7 +351,8 @@ function buildRate(t){
     rows+='<tr><td>'+c.word+'</td>'+cells+'</tr>'; });
   rows+='</table>';
   return {
-    preamble:'<p class="prompt">Listen to all segments fully. Then, rate how accurately each word describes <strong>how the Reference sounds compared with the segments above it</strong>.</p>'+playersHTML(segs),
+    preamble:'<p class="prompt">Listen to the following segments.</p>'
+      +playersHTML(segs,'Now, listen to the Reference and rate how accurately each word describes <strong>how the Reference sounds compared with the segments above it</strong>.'),
     html:rows+sliderHTML(),
     data:{task:'tag', version:'v2', response_format:'rate', trial_id:t.trial_id, track_id:t.track_id, ref_eq:t.ref_eq,
           presented_order:presented_order, rate_methods:choices.map(c=>c.method), rate_words:choices.map(c=>c.word)},
@@ -370,8 +383,10 @@ function buildMatch(t){
   grid+='</div><div id="listen-hint">Please play each clip to the end before continuing.</div>';
   const bank='<div id="tagbank" class="bank">'+pool.map(w=>'<div class="chip" data-tag="'+w+'">'+w+'</div>').join('')+'</div>';
   return {
-    preamble:'<p class="prompt">Listen to all segments fully. Then, drag each word into the slot beside the segment it best describes. <strong>Every word is used exactly once.</strong></p>',
-    html:grid+'<p class="hint">Drag the words below up into the slots</p>'+bank+sliderHTML(),
+    preamble:'<p class="prompt">Listen to all segments fully.</p>',
+    html:grid
+      +'<p class="prompt refnote">Now, drag each word into the slot beside the segment it best describes. <strong>Every word is used exactly once.</strong></p>'
+      +bank+sliderHTML(),
     data:{task:'match', version:'v3', trial_id:t.trial_id, track_id:t.track_id, model:t.model,
           seg_true:segList.map(s=>s.true_tag), seg_eq:segList.map(s=>s.eq), tag_pool:pool},
     onLoad:function(root, opts){
@@ -476,13 +491,15 @@ timeline.push({ type: jsPsychHtmlButtonResponse,
   stimulus:'<div class="doc"><h2>Welcome</h2>'
     +'<p>Thank you for taking part in this study.</p>'
     +'<p>This survey is part of an MSc Computer Science thesis at <strong>Queen Mary University of London</strong>, conducted by <strong>Mariachiara Cavagna</strong> under the supervision of <strong>Dr Georgios Velissaridis</strong>.</p>'
-    +'<p>The study investigates how people describe differences in audio recordings, specifically those resulting from equalization (EQ). Equalization refers to the balance of frequencies in an audio signal.</p>'
-    +'<p>During the survey, you will listen to different EQ versions of the same audio tracks, and you will have to choose how to describe them. The survey is divided into three short sections, each focusing on a different aspect of your listening experience.</p>'
+    +'<p>This study evaluates whether an automatic tagging method chooses the same words a human would to describe EQ-induced differences between audio recordings. Equalization (EQ) refers to the balance of frequencies in an audio signal.</p>'
+    +'<div class="callout">'
+    +'<p>During the survey, you will listen to different EQ versions of the same audio tracks, and you will have to select the best words to describe them. The survey is divided into three short sections, each with a different selection approach.</p>'
     +'<p>The survey takes approximately <strong>15–20 minutes</strong> to complete. For the best listening experience, please wear <strong>headphones</strong> and complete the survey in a <strong>quiet environment</strong>.</p>'
-    +'<p>Your responses are anonymous and will be used for research purposes only. Participation is voluntary, and you may stop the survey at any time without penalty.</p>'
+    +'</div>'
+    +'<p>Your responses are anonymous and will be used for research purposes only. Participation is voluntary, and you may stop the survey at any time.</p>'
     +'<p>By continuing, you confirm that you are at least 18 years old and consent to participate in this study.</p>'
     +'<p>If you have any questions about the study, please contact <strong>Mariachiara Cavagna</strong> at <a href="mailto:m.cavagna@se25.qmul.ac.uk">m.cavagna@se25.qmul.ac.uk</a>.</p>'
-    +'<p>Thank you for your participation.</p></div>',
+    +'<p>Thank you for your participation!</p></div>',
   choices:['I agree — continue'] });
 
 timeline.push({ type: jsPsychHtmlButtonResponse,
@@ -493,8 +510,8 @@ timeline.push({ type: jsPsychHtmlButtonResponse,
   on_finish:function(d){ if(d.response===0){ setUnloadGuard(false); jsPsych.abortExperiment('Thanks for your time — you can close this tab.'); } } });
 
 timeline.push({ type: jsPsychInstructions, show_clickable_nav:true, pages:[
-  '<h3>How it works</h3><p>You will do <strong>three short sections</strong>. In each trial you hear several short segments of the same song and describe how they sound using a few words. The task differs slightly between sections — each is explained when it begins.</p>',
-  '<h3>Two rules</h3><p>1. Listen to <strong>every segment fully</strong> — the response unlocks only after all have played, and you cannot skip ahead (you can replay).</p><p>2. At the bottom of every trial, a slider asks how <em>honest vs forced</em> your answer felt. There are no right or wrong answers.</p>',
+  '<h3>How it works</h3><p>You will complete <strong>three short sections</strong>. In each trial, you will hear several various EQ-adjusted versions of a music track and choose the best words to describe how they sound. The task differs slightly between sections (each is explained when it begins).</p>',
+  '<h3>Two rules</h3><p>1. Listen to <strong>every segment fully</strong>; the response unlocks only after all have played, and you cannot skip ahead (you can replay).</p><p>2. After each trial, a slider asks how <em>honest vs forced</em> your answer felt. There are no right or wrong answers.</p>',
   '<h3>Practice</h3><p>First, one practice trial to get the feel. It does not count.</p>'
 ]});
 
