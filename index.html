@@ -180,9 +180,24 @@
     .btn-back{background:var(--card);color:var(--text-2);border:1px solid var(--line-3)}
     .btn-back:hover{background:var(--card);border-color:var(--muted);opacity:1}
     textarea{font-size:15px;border:1px solid var(--line-2);border-radius:10px;padding:8px;color:var(--text)}
+
+    /* Refresh warning. Anchored to the bottom rather than the top so it neither crowds
+       the progress bar nor eats into the vertical budget a trial needs to fit on one
+       screen. Shown for exactly as long as the unload guard is armed. */
+    #refresh-warn{position:fixed;left:0;right:0;bottom:0;z-index:100;
+                  background:var(--bg);border-top:1px solid var(--line-2);
+                  color:var(--warn);font-size:12px;line-height:1.35;
+                  text-align:center;padding:7px 16px;text-wrap:pretty}
+    #refresh-warn[hidden]{display:none}
+    /* jsPsych makes <body> the scroll container and sets height:100% on it inline, so the
+       banner's reserved strip must come out of that height (border-box) rather than add
+       to it — content-box padding here means a scrollbar on every trial. */
+    body.warn-on{box-sizing:border-box;padding-bottom:34px}
   </style>
 </head>
-<body></body>
+<body>
+  <div id="refresh-warn" hidden>Please don’t refresh or close this tab — your answers are only saved at the end, so refreshing loses them.</div>
+</body>
 <script>
 /* ===== CONFIG: set DATAPIPE_ID after creating a free experiment at
    https://pipe.jspsych.org . Leave as placeholder to test locally
@@ -244,6 +259,9 @@ function unloadGuard(e){ e.preventDefault(); e.returnValue=''; return ''; }
 function setUnloadGuard(on){
   if(on) window.addEventListener('beforeunload', unloadGuard);
   else   window.removeEventListener('beforeunload', unloadGuard);
+  const b=document.getElementById('refresh-warn');
+  if(b) b.hidden=!on;
+  document.body.classList.toggle('warn-on', on);
 }
 
 /* navigation + answer persistence (for Back within a section) */
@@ -516,7 +534,7 @@ timeline.push({ type: jsPsychHtmlButtonResponse,
     +'<p>This study evaluates whether an automatic tagging method chooses the same words a human would to describe EQ-induced differences between audio recordings. Equalization (EQ) refers to the balance of frequencies in an audio signal.</p>'
     +'<div class="callout">'
     +'<p>During the survey, you will listen to different EQ versions of the same audio tracks, and you will have to select the best words to describe them. The survey is divided into three short sections, each with a different selection approach.</p>'
-    +'<p>The survey takes approximately <strong>15–20 minutes</strong> to complete. For the best listening experience, please wear <strong>headphones</strong> and complete the survey in a <strong>quiet environment</strong>.</p>'
+    +'<p>The survey takes approximately <strong>10-15 minutes</strong> to complete. For the best listening experience, please wear <strong>headphones</strong> and complete the survey in a <strong>quiet environment</strong>.</p>'
     +'</div>'
     +'<p>Your responses are anonymous and will be used for research purposes only. Participation is voluntary, and you may stop the survey at any time.</p>'
     +'<p>By continuing, you confirm that you are at least 18 years old and consent to participate in this study.</p>'
